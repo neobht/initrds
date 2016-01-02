@@ -1,0 +1,381 @@
+#!/bin/sh
+#(c) Copyright 2007 Barry Kauler, www.puppylinux.com
+#2007 Lesser GPL licence v2 (http://www.fsf.org/licensing/licenses/lgpl.html)
+#Aug 2007, init script in initramfs, for puppy v2.20, Sept: v3.00, Oct: v3.01
+#Nov 2007, v3.91: bugfix for humongous puppy.
+#dec 2007, v3.93: update for 2.6.24 kernel, no /dev/hd*. v3.94: bugfix.
+#v3.95 28dec07: load scsi_wait_scan.ko to fix sync problem with usb.
+#v3.95 1jan08: fix for renaming of pmedia ide/sata -> ata.
+#v3.96 26jan08: 2.6.24 kernel, remove scsi_wait_scan.ko and the delays.
+#v3.97 31jan2008: restore support for hd* drives.
+#v3.97 25feb2008: removed tmpfs on /tmp.
+#v3.97 5mar2008: handle SAVEMARK file (see universal installer and rc.shutdown).
+#v3.97 6mar2008: fix 'pfix=ram' for multisession cd/dvd.
+#v3.97 6mar2008: multisession, copy saved .sfs files to '/' in ram.
+#v3.98 3apr2008: partial fix, encrypted pup_save losetup failing.
+#v4.00 21apr2008: ntfs-3g upgraded v1.417 to v1.2412.
+#v4.00 26apr2008: slightly lowered threshold for copying pup_xxx.sfs to a tmpfs.
+#v4.00 27apr2008: k2.6.25: strange sync problem. try restore scsi_wait_scan. NO, DO NOT.
+#v4.01 7may2008: new system with all modules builtin to initrd, if ZDRVINIT='yes'
+#v4.02 31may2008: export ZDRVINIT in /etc/rc.d/PUPSTATE
+#v403 21jun08: reintroduce basic pcmcia support.
+#v403 23jun08: fix for humongous initrd.
+#v403 23jun08: fix boot from usb cd drive (classmate laptop).
+#v404 13Jul08: pfix=noram removed, now need pfix=copy to copy .sfs to ram.
+#v404 15jul08: prevent crash in PUPMODE 6,7. add pfix=fsck, otherwise never do fsck.
+#v404 16jul08: fix for classmate with internal usb flash, PUPMODE now 13, not 12.
+#v405 18jul08: default is now aufs. maybe won't even have unionfs module.
+#v406 2aug08: restore support for old /dev/hd* ide devices.
+#v406 9aug08: copy pup_xxx.sfs to same place as pup_save if fast media.
+#v407 fix for module name change.
+#v410 fix to allow 3 extra sfs files (a bug only allowed 2).
+#v411 multisession, load saved /dev entries.
+#v412 simplified module loading.
+#v412 slight changes for new busybox v1.12.1.
+#v412 fix usb-storage probe bug.
+#v412 DISTRO_SPECS file. pup_xxx.sfs, zdrv_xxx.sfs renamed.
+#v412 bugfix, /tmp/versioncleanup got overwritten by tmpfs mounted on /tmp.
+#v412 bugfix, pup_ro6 was not created (for 3rd sfs file).
+#w001 DISTRO_FILE_PREFIX, pup files renamed again, to woofsave.2fs, woofr001.sfs.
+#w003 fix for loading yenta-socket module.
+#w003 changed default to copy woofr001.sfs to ram >256MB ram.
+#w003 /usr/sbin/snapmergepuppy now saves whiteout files to save-layer, change 'ro' to 'ro+wh'.
+#w004 LANG=C
+#w007 load nls_utf8.ko
+#w012 bugfix. w014 usb flash can now have iso9660 f.s.
+#w014 BootFlash utility can create 2 partitions in usb drive, one for boot, other for save.
+#w015 allow 6 extra sfs files, up from 3.
+#w019 pmedia=ataflash, PUPMODE=13 to constrain writes to drv.
+#w460 bugfixes for zdrv, new name zu500629.sfs, handling 6 extra sfs files (7 incl. zdrv).
+#w460 bugfix, boot usb, 1st shutdown was not offering to save session sometimes.
+#w464 tidyup, make sure /etc/puppyversion is history.
+#w468 load nls_cp850, now default for fat f.s. (2.6.29.2 kernel).
+#w476 mntfunc() rewritten, support 'pkeys' boot param (work in progress).
+#w478 modify sfs exclusion rules.
+#w479 fix finding optical drive for kernel with old ide drivers.
+#w481 record fast partitions, used by rc.shutdown.
+#w482 lowered limit for copy sfs to ram, so multisession will work in 256mb pc.
+#v431 piratesmack: fix boot from ext4.
+#puppyrus2 tuxonice section add Pro
+#DdShurick переписал всё нафиг с 160 строки
+
+zcat /lib/consolefonts/ter-u16n.psf.gz | loadfont
+export LANG=C #w004
+
+PATH="/bin:/sbin"
+KERNELVER="`uname -r`"
+
+[ $loglevel ] && LOGLEVEL=$loglevel #v2.22
+
+#100318 perform a f.s. check...
+fsckme_func() { #passed params: partition filesystem [pupsavefile]
+ case $2 in
+  ext2|ext3|ext4)
+   e2fsck -y -f /dev/$1 >/tmp/chkret &
+   echo -e "\\033[1;35m" >/dev/console #35=purple
+   if [ "${1}" = "loop1" ];then
+    echo -n "Проверка файловой системы 'save file', ждите..." >/dev/console
+   else
+    echo -n "Проверка файловой системы '${1}', ждите..." >/dev/console
+   fi
+   usleep 200000 #100604 TazOC gave me idea that delay before pidof is good.
+   while [ "`pidof e2fsck`" != "" ];do
+    sleep 1
+    echo -n "." >/dev/console
+   done
+   echo -en "\\033[0;39m" >/dev/console
+  ;;
+ esac
+ if [ $3 ];then
+  PFSCK="yes"
+ fi
+}
+
+check_status()
+{
+  /bin/echo -en "\\033[72G" >/dev/console #move to column 72.
+  if [ $1 -eq 0 ]
+  then
+    /bin/echo -en "\\033[1;32mготово" >/dev/console
+    /bin/echo -e "\\033[0;39m" >/dev/console
+  else
+    /bin/echo -en "\\033[1;31mошибка" >/dev/console
+    /bin/echo -e "\\033[0;39m" >/dev/console
+    echo -en "\\033[1;35m" >/dev/console #35=purple
+    echo -n "Последние 4 строки /tmp/bootinit.log..." >/dev/console
+    /bin/echo -e "\\033[0;39m" >/dev/console
+    echo -en "\\033[1;31m" >/dev/console #31=red
+    cat /tmp/bootinit.log | tail -n 4 >/dev/console
+    /bin/echo -en "\\033[0;39m" >/dev/console
+    echo -en "\\033[1;35m" >/dev/console #35=purple
+    echo -n "Последние 4 строки kernel log..." >/dev/console
+    /bin/echo -e "\\033[0;39m" >/dev/console
+    echo -en "\\033[1;31m" >/dev/console #31=red
+    dmesg | tail -n 4 >/dev/console
+    /bin/echo -en "\\033[0;39m" >/dev/console
+    exec /bin/sh >/dev/console 2>&1
+  fi
+}
+
+[ $pmedia ] && PMEDIA=$pmedia #boot parameter, broad category of boot media. ex: cd.
+[ $pdev1 ] && PDEV1="$pdev1"    #boot parameter, partition have booted off. ex: hda3
+[ $dev ] && PDEV1="$dev"
+[ $psubdir ] && PSUBDIR="/$psubdir"
+[ $dir ] && PSUBDIR="/$dir" #boot parameter, directory for puppy files. ex: puppy220
+[ $pfsdir ] && PFSDIR="$pfsdir/" || PFSDIR="modules/"
+[ $pkeys ] && PKEYS=$pkeys #boot parameter, keyboard layout w476
+[ $resume ] && RESUME=$resume
+[ $serv ] && IP=$serv #loading of modules from the ftp-server
+[ $servpath ] && DIR=$servpath
+[ $load ] && LOAD=$(echo $load | tr ',' ' ')
+[ $noload ] && NOLOAD="$(echo \'$noload\' | tr ',' '|' | tr -d ' ')"
+#now supporting a boot menu...
+RDSH=""
+if [ "$pfix" ];then
+ for ONEFIX in `echo -n "$pfix" | tr ',' ' '`
+ do
+  case $ONEFIX in
+   ram)     PRAMONLY="yes";;      #run in ram only (do not load ${DISTRO_FILE_PREFIX}save).
+   ro)		RO="-r";;
+   nosoft)  PSOFT="no";;           #do not losd soft.pfs
+   rdsh)    RDSH="yes";;          #exit to shell in initial ramdisk.
+   rdsh0)   RDSH="0";;            #drop out early, before loading drivers.
+   rdsh6)   RDSH="6";;            #w091027 drop out just before mount layerfs.
+   nox)     PNOX="yes";;          #do not start X.
+   clean)   PCLEAN="yes";;        #force version upgrade and cleanup.
+   purge)   PPURGE="yes";;        #radical cleanup for broken system.
+   copy)    PCOPY="yes";;         #copy .sfs files into ram.
+   fsck)    PFSCK="yes";;         #do a fsck of ${DISTRO_FILE_PREFIX}save file.
+   [0-9]*)  PIGNORELAST=$ONEFIX;; #blacklist last $ONEFIX folders (multisession).
+  esac
+ done
+fi
+
+mount -t proc none /proc
+mount -t sysfs none /sys
+mount -t rootfs -o remount,rw rootfs /
+mount -t usbfs none /proc/bus/usb
+ln -s /proc/mounts /etc/mtab #resize2fs,e2fsck need this.
+ls /dev > /tmp/devices
+
+clear #got this out of embutils, compiled in t2 (as not currently in busybox)
+[ ! "$LOGLEVEL" ] && exec 1>/tmp/bootinit.log 2>&1 #remove o/p from console. v2.22 loglevel added.
+
+#puppyrus2 tuxonice section 
+###########  Tuxonice wake up ##############
+
+[ $RESUME ] || RESUME=$(fdisk -l | grep -m 1 ' 82 ' | cut -f1 -d' ')
+echo $RESUME > /sys/power/tuxonice/resume
+sleep 0.1
+echo 1 > /sys/power/tuxonice/do_resume
+
+swapon $RESUME && SWAPON=yes
+
+############################################
+
+#######################FINDING AND LOADING PUPPY FILES###########################
+[ "$RDSH" = "0" ] && exec /bin/sh >/dev/console 2>&1
+
+[ "$PCOPY" = "yes" ] && mount -t tmpfs tmpfs /mnt/tmpfs
+if [ "$PDEV1" = "" ]; then
+ echo "Укажите загрузочное устройство, например sda1" > /dev/console
+ read PDEV1
+fi
+echo -n "Монтирование загрузочного устройства" > /dev/console
+DEV=$(blkid | grep $PDEV1 | cut -f1 -d:)
+blkid $DEV | grep ntfs && MNT=ntfs-3g || MNT=mount
+until $MNT $DEV /mnt/dev_base $RO 2>/dev/null && check_status 0
+ do
+  sleep 1
+  echo -n . >/dev/console
+ done
+if [ "$PSUBDIR" = "" ]; then
+ echo "Укажите загрузочный каталог, если файлы PuppyRus
+в корне раздела просто нажмите Enter" > /dev/console
+ read PSUBDIR
+ [ $PSUBDIR ] && PSUBDIR=/$PSUBDIR
+fi
+cp /mnt/dev_base${PSUBDIR}/DISTRO_SPECS /etc/DISTRO_SPECS
+. /etc/DISTRO_SPECS
+[ $SQMNT ] || SQMNT=/mnt/bundles
+find /mnt/dev_base${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs 2>/dev/null > /tmp/PUPPYFILES
+echo -n "Загружается базовый файл" > /dev/console
+if [ "$PCOPY" = "yes" ]; then
+cp /mnt/dev_base${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /mnt/tmpfs/
+mount -o loop /mnt/tmpfs/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /base || (echo "База не найдена">/dev/console; check_status 1)
+else
+mount -o loop /mnt/dev_base${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /base  || (echo "База не найдена">/dev/console; check_status 1)
+fi
+if [ -d /mnt/dev_base$PSUBDIR/changes -a "$RO" != "-r" ]; then
+ln -s /mnt/dev_base$PSUBDIR/changes /save || check_status 1
+echo -n ", подключается каталог сохранения." > /dev/console
+elif [ "$(ls /mnt/dev_base$PSUBDIR/base/${DISTRO_FILE_PREFIX}-save.[234s]fs)" ]; then
+ if [ -f /mnt/dev_base$PSUBDIR/base/${DISTRO_FILE_PREFIX}-save.[234]fs ]; then
+mount -o loop /mnt/dev_base$PSUBDIR/base/${DISTRO_FILE_PREFIX}-save.[234]fs /save0 || check_status 1
+MKRAM="yes"
+UMNTMAIN='/save0=ro+wh:'
+echo -n " и файл сохранения " > /dev/console
+PUPMODE=13
+ fi
+ if [ -f /mnt/dev_base$PSUBDIR/base/${DISTRO_FILE_PREFIX}-save.sfs ]; then
+  if [ "$PCOPY" = "yes" ]; then
+cp /mnt/dev_base$PSUBDIR/base/${DISTRO_FILE_PREFIX}-save.sfs /mnt/tmpfs/
+mount -o loop /mnt/tmpfs/${DISTRO_FILE_PREFIX}-save.sfs /save1 || check_status 1
+  else
+mount -o loop /mnt/dev_base$PSUBDIR/base/${DISTRO_FILE_PREFIX}-save.sfs /save1 || check_status 1
+  fi
+UMNTSFS='/save1=ro+wh:'
+MKRAM="yes"
+echo -n " и архив сохранения " > /dev/console
+PUPMODE=11
+ fi
+else
+MKRAM="yes"
+PUPMODE=5
+fi
+if [ -f /mnt/dev_base$PSUBDIR/base/kernel-${KERNELVER}.sfs ]; then
+echo /mnt/dev_base$PSUBDIR/base/kernel-${KERNELVER}.sfs >> /tmp/PUPPYFILES
+ if [ "$PCOPY" = "yes" ]; then
+cp /mnt/dev_base$PSUBDIR/base/kernel-${KERNELVER}.sfs /mnt/tmpfs
+mount -o loop /mnt/tmpfs/kernel-${KERNELVER}.sfs /kernel || check_status 1
+ else
+mount -o loop /mnt/dev_base$PSUBDIR/base/kernel-${KERNELVER}.sfs /kernel || check_status 1
+ fi
+ZLAYER=':/kernel=ro'
+fi
+if [ "$MKRAM" = "yes" ]; then
+ ALLOCK=$(($(free | grep 'Mem:' | tr -s ' ' | cut -f 2 -d ' ') / 2)) #half of physical.
+ [ $ALLOCK -gt 524288 ] && ALLOCK=524288
+ mkdir /save
+ mount -t tmpfs -o size=${ALLOCK}k tmpfs /save
+echo -n " плюс tmpfs." > /dev/console
+fi
+check_status 0
+########################END FINDING AND LOADING PUPPY FILES############################
+
+##########################FINDING AND LOADING PUPPY MODULES###########################
+
+if [ "$PSOFT" != "no" -o -d /mnt/dev_base${PSUBDIR}/${PFSDIR} ];then
+EXTRASFSLIST="$(find /mnt/dev_base${PSUBDIR}/${PFSDIR} -name *\.pfs -exec basename {} \;)"
+[ $NOLOAD ] && EXTRASFSLIST="$(echo $EXTRASFSLIST | egrep -v $NOLOAD)"
+ if [ "$EXTRASFSLIST" != "" ];then
+echo -n "Загружаются модули программ" > /dev/console
+echo "$EXTRASFSLIST" | sort > /tmp/PFSMODULES
+CNTLOOP=3
+  for ONEEXTRA in $(cat /tmp/PFSMODULES)
+  do
+   [ "$(dirname $ONEEXTRA)" = "." ] && PFSSDIR="/mnt/dev_base$PSUBDIR/$PFSDIR" || PFSSDIR="/mnt/dev_base/"
+   [ -f ${PFSSDIR}${ONEEXTRA} ] || continue
+   [ "$(grep $ONEEXTRA /proc/mounts)" = "" ] || continue
+    mkdir -p /$ONEEXTRA
+    if [ "$PCOPY" = "yes" ]; then
+    cp ${PFSSDIR}${ONEEXTRA} /mnt/tmpfs/
+    mount -o loop /mnt/tmpfs/${ONEEXTRA} /$ONEEXTRA
+    else
+    mount -o loop ${PFSSDIR}${ONEEXTRA} /$ONEEXTRA
+    fi
+    [ $? -eq 0 ] && UMNTRO="${UMNTRO}:/${ONEEXTRA}=ro"
+    echo -n "$CNTLOOP " >> /tmp/CNTLOOP
+    CNTLOOP=`expr $CNTLOOP + 1`
+    [ $CNTLOOP -eq 64 ] && break
+    echo -n "." > /dev/console
+  done
+  check_status 0
+ else
+  echo -n "Модули не найдены, уточните параметр psubdir" > /dev/console
+ check_status 1
+ fi
+  [ $LOAD ] && for ONEEXTRA in $LOAD
+  do
+   [ -f /mnt/dev_base$PSUBDIR/optional/${ONEEXTRA} ] || continue
+   [ "$(grep $ONEEXTRA /proc/mounts)" = "" ] || continue
+   mkdir -p /$ONEEXTRA
+   if [ "$PCOPY" = "yes" ]; then
+    cp /mnt/dev_base$PSUBDIR/optional/${ONEEXTRA} /mnt/tmpfs/
+    mount -o loop /mnt/tmpfs/${ONEEXTRA} /$ONEEXTRA
+    else
+    mount -o loop /mnt/dev_base$PSUBDIR/optional/${ONEEXTRA} /$ONEEXTRA
+    fi
+    [ $? -eq 0 ] && UMNTRO="${UMNTRO}:/${ONEEXTRA}=ro"
+    echo -n "$CNTLOOP " >> /tmp/CNTLOOP
+    CNTLOOP=`expr $CNTLOOP + 1`
+   [ $CNTLOOP -eq 48 ] && break
+   echo -n "." > /dev/console
+  done
+else
+echo -n "Загрузка без модулей" > /dev/console
+check_status 0
+fi
+if [ ! -d /mnt/dev_base$PSUBDIR/changes -a "$PCOPY" = "yes" ]; then
+umount /mnt/dev_base
+fi
+
+#####################END FINDING AND LOADING PUPPY MODULES#################
+
+mkdir -p /save/etc/rc.d
+echo "PUPMODE=$PUPMODE" > /save/etc/rc.d/PUPSTATE
+[ "$PDEV1" ] && echo "PDEV1='$PDEV1'" >> /save/etc/rc.d/PUPSTATE
+[ "$PSUBDIR" ] && echo "PSUBDIR='$PSUBDIR'" >> /save/etc/rc.d/PUPSTATE
+[ "$SWAPON" ] && echo "SWAPON='$SWAPON'" >> /save/etc/rc.d/PUPSTATE
+[ "$IP" ] && echo "SERVIP='$IP'" >> /save/etc/rc.d/PUPSTATE
+[ "$DIR" ] && echo "SERVDIR='$DIR'" >> /save/etc/rc.d/PUPSTATE
+
+[ "$RDSH" = "6" ] && exec /bin/sh >/dev/console 2>&1 #w091027
+
+#######################SETUP UNIONFS LAYERED FILESYSTEM###################
+#create the unionfs layered f.s.... ***THE BIG EVENT***
+echo -n "Настройка слоёв файловой системы unionfs..." > /dev/console
+ mount -t aufs -o udba=reval,diropq=w,dirs=/save=rw:${UMNTMAIN}${UMNTSFS}/base=ro${ZLAYER}${UMNTRO} unionfs /pup_new
+
+check_status $? #END STEP FIVE
+#######################END SETUP UNIONFS LAYERED FILESYSTEM###################
+
+#######################SETUP SWITCH TO MAIN FILESYSTEM#######################
+
+echo -n "Замещение корневой файловой системы на многослойную..." > /dev/console
+
+#prepare everything for doing a switch_root...
+#cpio archive does switch_root, lose the initial-ramfs, so move all mntd...
+for ONEMNT in `awk '/loop/ {print $2}' /proc/mounts`
+do
+ mkdir -p /pup_new${SQMNT}$ONEMNT
+ mount -o move $ONEMNT /pup_new${SQMNT}$ONEMNT
+done
+
+mkdir -p /pup_new/mnt/dev_base
+mount -o move /mnt/dev_base /pup_new/mnt/dev_base
+if [ "$PCOPY" = "yes" ]; then
+ mkdir -p /pup_new/mnt/tmpfs
+ mount -o move /mnt/tmpfs /pup_new/mnt/tmpfs
+fi
+mkdir -p /pup_new$SQMNT/tmp
+cp /tmp/* /pup_new$SQMNT/tmp
+
+#mount home partition. Add DdShurick
+if [ $CRYPTHOME ]; then
+mount $CRYPTHOME /pup_new/home
+elif [ $UUID ]; then
+mount UUID=$UUID /pup_new/home
+elif [ $LABEL ];then
+mount LABEL=$LABEL /pup_new/home
+fi
+
+#PNOX is a boot param. /etc/profile prevents X from starting if this file exists...
+[ "$PNOX" = "yes" ] && touch /pup_new/tmp/bootcnt.txt
+cp /etc/DISTRO_SPECS /pup_new/etc/
+cp -af /tmp/* /pup_new/initrd/tmp/ #keep any log files.
+
+#RDSH is a boot param. exit to initial ramdisk shell...
+if [ "$RDSH" = "yes" ];then
+ echo > /dev/console
+ echo "Выходим в оболочку рамдиска. Наберите 'exec switch' для продолжения загрузки PuppyRus." > /dev/console 
+fi
+
+sync
+umount /proc/bus/usb
+umount /sys
+umount /proc
+
+exec switch_root /pup_new /sbin/init
+
+###END###

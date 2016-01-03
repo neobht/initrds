@@ -1,0 +1,52 @@
+#part of rc.init
+##############LOAD PUPPY FILES FROM TFTP SERVER#################
+lan_load () {
+echo -n "Проверяем Ethernet..." > /dev/console
+ifconfig lo up
+lanIface=$(ls -1 /sys/class/net/ | grep ^e) || check_status 1
+for OneIface in $lanIface
+ do
+ifconfig $OneIface up
+hostIp=$(udhcpc -n -i $OneIface | awk '/Lease of/ {print $3}')
+  if [ "$hostIp" ]; then
+[ $(echo $IP | cut -f -3 -d '.') = $(echo $hostIp | cut -f -3 -d '.') ] || continue
+  else
+hostIp=$(echo $IP | cut -f -3 -d '.').222
+  fi
+ifconfig $OneIface $hostIp up
+check_status $?
+break
+ done
+echo "IP=$IP" > /tmp/ftp
+echo "DIR=$DIR" >> /tmp/ftp
+mount -t tmpfs tmpfs /mnt/tmpfs
+echo -n "Введите логин, если необходим, или нажмите Enter:" > /dev/console
+read LOGIN
+if [ "$LOGIN" ]; then
+echo "LOGIN=$LOGIN" >> /tmp/ftp
+LOGIN="-u $LOGIN"
+echo "Введите пароль (слепой ввод):" > /dev/console
+read -s PASSW
+echo "PASSW=$PASSW" >> /tmp/ftp
+PASSW="-p $PASSW"
+fi
+
+echo -n "Загружается по сети базовый файл" > /dev/console
+ftpget $LOGIN $PASSW $IP /mnt/tmpfs/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs Volume_1/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs
+mount -o loop /mnt/tmpfs/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /pup_ro2 || (echo "База не найдена">/dev/console; check_status 1)
+if ftpget $LOGIN $PASSW $IP /mnt/tmpfs/${DISTRO_FILE_PREFIX}-save.sfs Volume_1/base/${DISTRO_FILE_PREFIX}-save.sfs; then
+echo -n ", файл сохранения " > /dev/console
+mount -o loop /mnt/tmpfs/${DISTRO_FILE_PREFIX}-save.sfs /pup_ro1 && UMNTMAIN='/pup_ro1=ro+wh:'
+fi
+if ftpget $LOGIN $PASSW $IP /mnt/tmpfs/kernel-${KERNELVER}.sfs Volume_1/base/kernel-${KERNELVER}.sfs; then
+echo -n ", модуль ядра " > /dev/console
+mount -o loop /mnt/tmpfs/kernel-${KERNELVER}.sfs /pup_z && ZLAYER=':/pup_z=ro'
+fi
+ ALLOCK=$(($(free | grep 'Mem:' | tr -s ' ' | cut -f 2 -d ' ') / 2)) #half of physical.
+ [ $ALLOCK -gt 524288 ] && ALLOCK=524288
+ mkdir /pup_rw
+ mount -t tmpfs -o size=${ALLOCK}k tmpfs /pup_rw && echo -n " плюс tmpfs." > /dev/console
+ PUPMODE=lan
+ check_status 0
+ }
+##############END LOAD PUPPY FILES FROM TFTP SERVER#################

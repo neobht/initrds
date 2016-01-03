@@ -1,95 +1,10 @@
 #!/bin/sh
+#Idea from :
 #(c) Copyright 2007 Barry Kauler, www.puppylinux.com
 #2007 Lesser GPL licence v2 (http://www.fsf.org/licensing/licenses/lgpl.html)
-#Aug 2007, init script in initramfs, for puppy v2.20, Sept: v3.00, Oct: v3.01
-#Nov 2007, v3.91: bugfix for humongous puppy.
-#dec 2007, v3.93: update for 2.6.24 kernel, no /dev/hd*. v3.94: bugfix.
-#v3.95 28dec07: load scsi_wait_scan.ko to fix sync problem with usb.
-#v3.95 1jan08: fix for renaming of pmedia ide/sata -> ata.
-#v3.96 26jan08: 2.6.24 kernel, remove scsi_wait_scan.ko and the delays.
-#v3.97 31jan2008: restore support for hd* drives.
-#v3.97 25feb2008: removed tmpfs on /tmp.
-#v3.97 5mar2008: handle SAVEMARK file (see universal installer and rc.shutdown).
-#v3.97 6mar2008: fix 'pfix=ram' for multisession cd/dvd.
-#v3.97 6mar2008: multisession, copy saved .sfs files to '/' in ram.
-#v3.98 3apr2008: partial fix, encrypted pup_save losetup failing.
-#v4.00 21apr2008: ntfs-3g upgraded v1.417 to v1.2412.
-#v4.00 26apr2008: slightly lowered threshold for copying pup_xxx.sfs to a tmpfs.
-#v4.00 27apr2008: k2.6.25: strange sync problem. try restore scsi_wait_scan. NO, DO NOT.
-#v4.01 7may2008: new system with all modules builtin to initrd, if ZDRVINIT='yes'
-#v4.02 31may2008: export ZDRVINIT in /etc/rc.d/PUPSTATE
-#v403 21jun08: reintroduce basic pcmcia support.
-#v403 23jun08: fix for humongous initrd.
-#v403 23jun08: fix boot from usb cd drive (classmate laptop).
-#v404 13Jul08: pfix=noram removed, now need pfix=copy to copy .sfs to ram.
-#v404 15jul08: prevent crash in PUPMODE 6,7. add pfix=fsck, otherwise never do fsck.
-#v404 16jul08: fix for classmate with internal usb flash, PUPMODE now 13, not 12.
-#v405 18jul08: default is now aufs. maybe won't even have unionfs module.
-#v406 2aug08: restore support for old /dev/hd* ide devices.
-#v406 9aug08: copy pup_xxx.sfs to same place as pup_save if fast media.
-#v407 fix for module name change.
-#v410 fix to allow 3 extra sfs files (a bug only allowed 2).
-#v411 multisession, load saved /dev entries.
-#v412 simplified module loading.
-#v412 slight changes for new busybox v1.12.1.
-#v412 fix usb-storage probe bug.
-#v412 DISTRO_SPECS file. pup_xxx.sfs, zdrv_xxx.sfs renamed.
-#v412 bugfix, /tmp/versioncleanup got overwritten by tmpfs mounted on /tmp.
-#v412 bugfix, pup_ro6 was not created (for 3rd sfs file).
-#w001 DISTRO_FILE_PREFIX, pup files renamed again, to woofsave.2fs, woofr001.sfs.
-#w003 fix for loading yenta-socket module.
-#w003 changed default to copy woofr001.sfs to ram >256MB ram.
-#w003 /usr/sbin/snapmergepuppy now saves whiteout files to save-layer, change 'ro' to 'ro+wh'.
-#w004 LANG=C
-#w007 load nls_utf8.ko
-#w012 bugfix. w014 usb flash can now have iso9660 f.s.
-#w014 BootFlash utility can create 2 partitions in usb drive, one for boot, other for save.
-#w015 allow 6 extra sfs files, up from 3.
-#w019 pmedia=ataflash, PUPMODE=13 to constrain writes to drv.
-#w460 bugfixes for zdrv, new name zu500629.sfs, handling 6 extra sfs files (7 incl. zdrv).
-#w460 bugfix, boot usb, 1st shutdown was not offering to save session sometimes.
-#w464 tidyup, make sure /etc/puppyversion is history.
-#w468 load nls_cp850, now default for fat f.s. (2.6.29.2 kernel).
-#w476 mntfunc() rewritten, support 'pkeys' boot param (work in progress).
-#w478 modify sfs exclusion rules.
-#w479 fix finding optical drive for kernel with old ide drivers.
-#w481 record fast partitions, used by rc.shutdown.
-#w482 lowered limit for copy sfs to ram, so multisession will work in 256mb pc.
-#v431 piratesmack: fix boot from ext4.
+#
 #puppyrus2 tuxonice section add Pro
-#DdShurick переписал всё нафиг с 160 строки
-
-zcat /lib/consolefonts/ter-u16n.psf.gz | loadfont
-export LANG=C #w004
-
-PATH="/bin:/sbin"
-KERNELVER="`uname -r`"
-
-[ $loglevel ] && LOGLEVEL=$loglevel #v2.22
-
-#100318 perform a f.s. check...
-fsckme_func() { #passed params: partition filesystem [pupsavefile]
- case $2 in
-  ext2|ext3|ext4)
-   e2fsck -y -f /dev/$1 >/tmp/chkret &
-   echo -e "\\033[1;35m" >/dev/console #35=purple
-   if [ "${1}" = "loop1" ];then
-    echo -n "Проверка файловой системы 'save file', ждите..." >/dev/console
-   else
-    echo -n "Проверка файловой системы '${1}', ждите..." >/dev/console
-   fi
-   usleep 200000 #100604 TazOC gave me idea that delay before pidof is good.
-   while [ "`pidof e2fsck`" != "" ];do
-    sleep 1
-    echo -n "." >/dev/console
-   done
-   echo -en "\\033[0;39m" >/dev/console
-  ;;
- esac
- if [ $3 ];then
-  PFSCK="yes"
- fi
-}
+#DdShurick переписал всё нафиг с 85 строки
 
 check_status()
 {
@@ -117,6 +32,12 @@ check_status()
   fi
 }
 
+zcat /lib/consolefonts/ter-u16n.psf.gz | loadfont
+export LANG=C #w004
+
+PATH="/bin:/sbin"
+KERNELVER="`uname -r`"
+[ $loglevel ] && LOGLEVEL=$loglevel #v2.22
 [ $pmedia ] && PMEDIA=$pmedia #boot parameter, broad category of boot media. ex: cd.
 [ $pdev1 ] && PDEV1="$pdev1"    #boot parameter, partition have booted off. ex: hda3
 [ $dev ] && PDEV1="$dev"
@@ -344,6 +265,8 @@ done
 
 mkdir -p /pup_new/mnt/dev_base
 mount -o move /mnt/dev_base /pup_new/mnt/dev_base
+mkdir -p /pup_new/mnt/save
+mount -o move /save /pup_new/mnt/save
 if [ "$PCOPY" = "yes" ]; then
  mkdir -p /pup_new/mnt/tmpfs
  mount -o move /mnt/tmpfs /pup_new/mnt/tmpfs

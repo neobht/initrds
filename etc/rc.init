@@ -8,28 +8,28 @@
 
 check_status()
 {
-  /bin/echo -en "\\033[72G" >/dev/console #move to column 72.
-  if [ $1 -eq 0 ]
-  then
-    /bin/echo -en "\\033[1;32mготово" >/dev/console
-    /bin/echo -e "\\033[0;39m" >/dev/console
-  else
-    /bin/echo -en "\\033[1;31mошибка" >/dev/console
-    /bin/echo -e "\\033[0;39m" >/dev/console
-    echo -en "\\033[1;35m" >/dev/console #35=purple
-    echo -n "Последние 4 строки /tmp/bootinit.log..." >/dev/console
-    /bin/echo -e "\\033[0;39m" >/dev/console
-    echo -en "\\033[1;31m" >/dev/console #31=red
-    cat /tmp/bootinit.log | tail -n 4 >/dev/console
-    /bin/echo -en "\\033[0;39m" >/dev/console
-    echo -en "\\033[1;35m" >/dev/console #35=purple
-    echo -n "Последние 4 строки kernel log..." >/dev/console
-    /bin/echo -e "\\033[0;39m" >/dev/console
-    echo -en "\\033[1;31m" >/dev/console #31=red
-    dmesg | tail -n 4 >/dev/console
-    /bin/echo -en "\\033[0;39m" >/dev/console
-    exec /bin/sh >/dev/console 2>&1
-  fi
+    /bin/echo -en "\\033[72G" >/dev/console #move to column 72.
+    if [ $1 -eq 0 ]
+    then
+        /bin/echo -en "\\033[1;32mготово" >/dev/console
+        /bin/echo -e "\\033[0;39m" >/dev/console
+    else
+        /bin/echo -en "\\033[1;31mошибка" >/dev/console
+        /bin/echo -e "\\033[0;39m" >/dev/console
+        echo -en "\\033[1;35m" >/dev/console #35=purple
+        echo -n "Последние 4 строки /tmp/bootinit.log..." >/dev/console
+        /bin/echo -e "\\033[0;39m" >/dev/console
+        echo -en "\\033[1;31m" >/dev/console #31=red
+        cat /tmp/bootinit.log | tail -n 4 >/dev/console
+        /bin/echo -en "\\033[0;39m" >/dev/console
+        echo -en "\\033[1;35m" >/dev/console #35=purple
+        echo -n "Последние 4 строки kernel log..." >/dev/console
+        /bin/echo -e "\\033[0;39m" >/dev/console
+        echo -en "\\033[1;31m" >/dev/console #31=red
+        dmesg | tail -n 4 >/dev/console
+        /bin/echo -en "\\033[0;39m" >/dev/console
+        exec /bin/sh >/dev/console 2>&1
+    fi
 }
 
 zcat /lib/consolefonts/ter-u16n.psf.gz | loadfont
@@ -52,19 +52,19 @@ KERNELVER="`uname -r`"
 #now supporting a boot menu...
 RDSH=""
 if [ "$pfix" ];then
- for ONEFIX in `echo -n "$pfix" | tr ',' ' '`
- do
-  case $ONEFIX in
-   ram)     PRAMONLY="yes";;      #run in ram only (do not load ${DISTRO_FILE_PREFIX}save).
-   ro)		RO="-r";;
-   nosoft)  PSOFT="no";;           #do not losd soft.pfs
-   rdsh)    RDSH="yes";;          #exit to shell in initial ramdisk.
-   rdsh0)   RDSH="0";;            #drop out early, before loading drivers.
-   rdsh6)   RDSH="6";;            #w091027 drop out just before mount layerfs.
-   nox)     PNOX="yes";;          #do not start X.
-   copy)    PCOPY="yes";;         #copy .sfs files into ram.
-  esac
- done
+    for ONEFIX in `echo -n "$pfix" | tr ',' ' '`
+    do
+        case $ONEFIX in
+            ram)        PRAMONLY="yes";;      #run in ram only (do not load ${DISTRO_FILE_PREFIX}save).
+            ro)         RO="-r";;
+            nosoft)     PSOFT="no";;           #do not losd soft.pfs
+            rdsh)       RDSH="yes";;          #exit to shell in initial ramdisk.
+            rdsh0)      RDSH="0";;            #drop out early, before loading drivers.
+            rdsh6)      RDSH="6";;            #w091027 drop out just before mount layerfs.
+            nox)        PNOX="yes";;          #do not start X.
+            copy)       PCOPY="yes";;         #copy .sfs files into ram.
+        esac
+    done
 fi
 
 mount -t proc none /proc
@@ -93,23 +93,23 @@ swapon $RESUME && SWAPON=yes
 
 [ "$PCOPY" = "yes" ] && mount -t tmpfs tmpfs /mnt/tmpfs
 if [ "$PDEV1" = "" ]; then
- echo "Укажите загрузочное устройство, например sda1" > /dev/console
- read PDEV1
+    echo "Укажите загрузочное устройство, например sda1" > /dev/console
+    read PDEV1
 fi
 echo -n "Монтирование загрузочного устройства" > /dev/console
 DEV=$(blkid | grep $PDEV1 | cut -f1 -d:)
 blkid $DEV | grep ntfs && MNT=ntfs-3g || MNT=mount
 mkdir /mnt/$PDEV1
 until $MNT $DEV /mnt/$PDEV1 $RO 2>/dev/null && check_status 0
- do
-  sleep 1
-  echo -n . >/dev/console
- done
+do
+    sleep 1
+    echo -n . >/dev/console
+done
 if [ "$PSUBDIR" = "" ]; then
- echo "Укажите загрузочный каталог, если файлы PuppyRus
-в корне раздела просто нажмите Enter" > /dev/console
- read PSUBDIR
- [ $PSUBDIR ] && PSUBDIR=/$PSUBDIR
+    echo "Укажите загрузочный каталог, если файлы PuppyRus
+    в корне раздела просто нажмите Enter" > /dev/console
+    read PSUBDIR
+    [ $PSUBDIR ] && PSUBDIR=/$PSUBDIR
 fi
 cp /mnt/${PDEV1}${PSUBDIR}/DISTRO_SPECS /etc/DISTRO_SPECS
 . /etc/DISTRO_SPECS
@@ -117,54 +117,54 @@ cp /mnt/${PDEV1}${PSUBDIR}/DISTRO_SPECS /etc/DISTRO_SPECS
 find /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs 2>/dev/null > /tmp/PUPPYFILES
 echo -n "Загружается базовый файл" > /dev/console
 if [ "$PCOPY" = "yes" ]; then
-cp /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /mnt/tmpfs/
-mount -o loop /mnt/tmpfs/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /base || (echo "База не найдена">/dev/console; check_status 1)
+    cp /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /mnt/tmpfs/
+    mount -o loop /mnt/tmpfs/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /base || (echo "База не найдена">/dev/console; check_status 1)
 else
-mount -o loop /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /base  || (echo "База не найдена">/dev/console; check_status 1)
+    mount -o loop /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /base  || (echo "База не найдена">/dev/console; check_status 1)
 fi
 if [ -d /mnt/${PDEV1}${PSUBDIR}/changes -a "$RO" != "-r" ]; then
-ln -s /mnt/${PDEV1}${PSUBDIR}/changes /save || check_status 1
-echo -n ", подключается каталог сохранения." > /dev/console
+    ln -s /mnt/${PDEV1}${PSUBDIR}/changes /save || check_status 1
+    echo -n ", подключается каталог сохранения." > /dev/console
 elif [ "$(ls /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.[234s]fs)" ]; then
- if [ -f /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.[234]fs ]; then
-mount -o loop /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.[234]fs /save0 || check_status 1
-MKRAM="yes"
-UMNTMAIN='/save0=ro+wh:'
-echo -n " и файл сохранения " > /dev/console
-PUPMODE=13
- fi
- if [ -f /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.sfs ]; then
-  if [ "$PCOPY" = "yes" ]; then
-cp /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.sfs /mnt/tmpfs/
-mount -o loop /mnt/tmpfs/${DISTRO_FILE_PREFIX}-save.sfs /save1 || check_status 1
-  else
-mount -o loop /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.sfs /save1 || check_status 1
-  fi
-UMNTSFS='/save1=ro+wh:'
-MKRAM="yes"
-echo -n " и архив сохранения " > /dev/console
-PUPMODE=11
- fi
+    if [ -f /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.[234]fs ]; then
+        mount -o loop /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.[234]fs /save0 || check_status 1
+        MKRAM="yes"
+        UMNTMAIN='/save0=ro+wh:'
+        echo -n " и файл сохранения " > /dev/console
+        PUPMODE=13
+    fi
+    if [ -f /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.sfs ]; then
+        if [ "$PCOPY" = "yes" ]; then
+            cp /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.sfs /mnt/tmpfs/
+            mount -o loop /mnt/tmpfs/${DISTRO_FILE_PREFIX}-save.sfs /save1 || check_status 1
+        else
+            mount -o loop /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.sfs /save1 || check_status 1
+        fi
+        UMNTSFS='/save1=ro+wh:'
+        MKRAM="yes"
+        echo -n " и архив сохранения " > /dev/console
+        PUPMODE=11
+    fi
 else
-MKRAM="yes"
-PUPMODE=5
+    MKRAM="yes"
+    PUPMODE=5
 fi
 if [ -f /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs ]; then
-echo /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs >> /tmp/PUPPYFILES
- if [ "$PCOPY" = "yes" ]; then
-cp /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs /mnt/tmpfs
-mount -o loop /mnt/tmpfs/kernel-${KERNELVER}.sfs /kernel || check_status 1
- else
-mount -o loop /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs /kernel || check_status 1
- fi
-ZLAYER=':/kernel=ro'
+    echo /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs >> /tmp/PUPPYFILES
+    if [ "$PCOPY" = "yes" ]; then
+        cp /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs /mnt/tmpfs
+        mount -o loop /mnt/tmpfs/kernel-${KERNELVER}.sfs /kernel || check_status 1
+    else
+        mount -o loop /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs /kernel || check_status 1
+    fi
+    ZLAYER=':/kernel=ro'
 fi
 if [ "$MKRAM" = "yes" ]; then
- ALLOCK=$(($(free | grep 'Mem:' | tr -s ' ' | cut -f 2 -d ' ') / 2)) #half of physical.
- [ $ALLOCK -gt 524288 ] && ALLOCK=524288
- mkdir /save
- mount -t tmpfs -o size=${ALLOCK}k tmpfs /save
-echo -n " плюс tmpfs." > /dev/console
+    ALLOCK=$(($(free | grep 'Mem:' | tr -s ' ' | cut -f 2 -d ' ') / 2)) #half of physical.
+    [ $ALLOCK -gt 524288 ] && ALLOCK=524288
+    mkdir /save
+    mount -t tmpfs -o size=${ALLOCK}k tmpfs /save
+    echo -n " плюс tmpfs." > /dev/console
 fi
 check_status 0
 ########################END FINDING AND LOADING PUPPY FILES############################
@@ -172,58 +172,58 @@ check_status 0
 ##########################FINDING AND LOADING PUPPY MODULES###########################
 
 if [ "$PSOFT" != "no" -o -d /mnt/${PDEV1}${PSUBDIR}/${PFSDIR} ];then
-EXTRASFSLIST="$(find /mnt/${PDEV1}${PSUBDIR}/${PFSDIR} -name *\.pfs -exec basename {} \;)"
-[ $NOLOAD ] && EXTRASFSLIST="$(echo $EXTRASFSLIST | egrep -v $NOLOAD)"
- if [ "$EXTRASFSLIST" != "" ];then
-echo -n "Загружаются модули программ" > /dev/console
-echo "$EXTRASFSLIST" | sort > /tmp/PFSMODULES
-CNTLOOP=3
-  for ONEEXTRA in $(cat /tmp/PFSMODULES)
-  do
-   [ "$(dirname $ONEEXTRA)" = "." ] && PFSSDIR="/mnt/${PDEV1}${PSUBDIR}/${PFSDIR}" || PFSSDIR="/mnt/$PDEV1/"
-   [ -f ${PFSSDIR}${ONEEXTRA} ] || continue
-   [ "$(grep $ONEEXTRA /proc/mounts)" = "" ] || continue
-    mkdir -p /$ONEEXTRA
-    if [ "$PCOPY" = "yes" ]; then
-    cp ${PFSSDIR}${ONEEXTRA} /mnt/tmpfs/
-    mount -o loop /mnt/tmpfs/${ONEEXTRA} /$ONEEXTRA
+    EXTRASFSLIST="$(find /mnt/${PDEV1}${PSUBDIR}/${PFSDIR} -name *\.pfs -exec basename {} \;)"
+    [ $NOLOAD ] && EXTRASFSLIST="$(echo $EXTRASFSLIST | egrep -v $NOLOAD)"
+    if [ "$EXTRASFSLIST" != "" ];then
+        echo -n "Загружаются модули программ" > /dev/console
+        echo "$EXTRASFSLIST" | sort > /tmp/PFSMODULES
+        CNTLOOP=3
+        for ONEEXTRA in $(cat /tmp/PFSMODULES)
+        do
+            [ "$(dirname $ONEEXTRA)" = "." ] && PFSSDIR="/mnt/${PDEV1}${PSUBDIR}/${PFSDIR}" || PFSSDIR="/mnt/$PDEV1/"
+            [ -f ${PFSSDIR}${ONEEXTRA} ] || continue
+            [ "$(grep $ONEEXTRA /proc/mounts)" = "" ] || continue
+            mkdir -p /$ONEEXTRA
+            if [ "$PCOPY" = "yes" ]; then
+                cp ${PFSSDIR}${ONEEXTRA} /mnt/tmpfs/
+                mount -o loop /mnt/tmpfs/${ONEEXTRA} /$ONEEXTRA
+            else
+                mount -o loop ${PFSSDIR}${ONEEXTRA} /$ONEEXTRA
+            fi
+            [ $? -eq 0 ] && UMNTRO="${UMNTRO}:/${ONEEXTRA}=ro"
+            echo -n "$CNTLOOP " >> /tmp/CNTLOOP
+            CNTLOOP=`expr $CNTLOOP + 1`
+            [ $CNTLOOP -eq 64 ] && break
+            echo -n "." > /dev/console
+        done
+        check_status 0
     else
-    mount -o loop ${PFSSDIR}${ONEEXTRA} /$ONEEXTRA
+        echo -n "Модули не найдены, уточните параметр psubdir" > /dev/console
+        check_status 1
     fi
-    [ $? -eq 0 ] && UMNTRO="${UMNTRO}:/${ONEEXTRA}=ro"
-    echo -n "$CNTLOOP " >> /tmp/CNTLOOP
-    CNTLOOP=`expr $CNTLOOP + 1`
-    [ $CNTLOOP -eq 64 ] && break
-    echo -n "." > /dev/console
-  done
-  check_status 0
- else
-  echo -n "Модули не найдены, уточните параметр psubdir" > /dev/console
- check_status 1
- fi
-  [ $LOAD ] && for ONEEXTRA in $LOAD
-  do
-   [ -f /mnt/${PDEV1}${PSUBDIR}/optional/${ONEEXTRA} ] || continue
-   [ "$(grep $ONEEXTRA /proc/mounts)" = "" ] || continue
-   mkdir -p /$ONEEXTRA
-   if [ "$PCOPY" = "yes" ]; then
-    cp /mnt/${PDEV1}${PSUBDIR}/optional/${ONEEXTRA} /mnt/tmpfs/
-    mount -o loop /mnt/tmpfs/${ONEEXTRA} /$ONEEXTRA
-    else
-    mount -o loop /mnt/${PDEV1}${PSUBDIR}/optional/${ONEEXTRA} /$ONEEXTRA
-    fi
-    [ $? -eq 0 ] && UMNTRO="${UMNTRO}:/${ONEEXTRA}=ro"
-    echo -n "$CNTLOOP " >> /tmp/CNTLOOP
-    CNTLOOP=`expr $CNTLOOP + 1`
-   [ $CNTLOOP -eq 48 ] && break
-   echo -n "." > /dev/console
-  done
+    [ $LOAD ] && for ONEEXTRA in $LOAD
+    do
+        [ -f /mnt/${PDEV1}${PSUBDIR}/optional/${ONEEXTRA} ] || continue
+        [ "$(grep $ONEEXTRA /proc/mounts)" = "" ] || continue
+        mkdir -p /$ONEEXTRA
+        if [ "$PCOPY" = "yes" ]; then
+            cp /mnt/${PDEV1}${PSUBDIR}/optional/${ONEEXTRA} /mnt/tmpfs/
+            mount -o loop /mnt/tmpfs/${ONEEXTRA} /$ONEEXTRA
+        else
+            mount -o loop /mnt/${PDEV1}${PSUBDIR}/optional/${ONEEXTRA} /$ONEEXTRA
+        fi
+        [ $? -eq 0 ] && UMNTRO="${UMNTRO}:/${ONEEXTRA}=ro"
+        echo -n "$CNTLOOP " >> /tmp/CNTLOOP
+        CNTLOOP=`expr $CNTLOOP + 1`
+        [ $CNTLOOP -eq 48 ] && break
+        echo -n "." > /dev/console
+    done
 else
-echo -n "Загрузка без модулей" > /dev/console
-check_status 0
+    echo -n "Загрузка без модулей" > /dev/console
+    check_status 0
 fi
 if [ ! -d /mnt/${PDEV1}${PSUBDIR}/changes -a "$PCOPY" = "yes" ]; then
-umount /mnt/$PDEV1
+    umount /mnt/$PDEV1
 fi
 
 #####################END FINDING AND LOADING PUPPY MODULES#################
@@ -241,7 +241,7 @@ echo "PUPMODE=$PUPMODE" > /save/etc/rc.d/PUPSTATE
 #######################SETUP UNIONFS LAYERED FILESYSTEM###################
 #create the unionfs layered f.s.... ***THE BIG EVENT***
 echo -n "Настройка слоёв файловой системы unionfs..." > /dev/console
- mount -t aufs -o udba=reval,diropq=w,dirs=/save=rw:${UMNTMAIN}${UMNTSFS}/base=ro${ZLAYER}${UMNTRO} unionfs /pup_new
+mount -t aufs -o udba=reval,diropq=w,dirs=/save=rw:${UMNTMAIN}${UMNTSFS}/base=ro${ZLAYER}${UMNTRO} unionfs /pup_new
 
 check_status $? #END STEP FIVE
 #######################END SETUP UNIONFS LAYERED FILESYSTEM###################
@@ -254,8 +254,8 @@ echo -n "Замещение корневой файловой системы н�
 #cpio archive does switch_root, lose the initial-ramfs, so move all mntd...
 for ONEMNT in `awk '/loop/ {print $2}' /proc/mounts`
 do
- mkdir -p /pup_new${SQMNT}$ONEMNT
- mount -o move $ONEMNT /pup_new${SQMNT}$ONEMNT
+    mkdir -p /pup_new${SQMNT}$ONEMNT
+    mount -o move $ONEMNT /pup_new${SQMNT}$ONEMNT
 done
 
 mkdir -p /pup_new/mnt/$PDEV1
@@ -263,19 +263,19 @@ mount -o move /mnt/$PDEV1 /pup_new/mnt/$PDEV1
 mkdir -p /pup_new/mnt/save
 mount -o move /save /pup_new/mnt/save
 if [ "$PCOPY" = "yes" ]; then
- mkdir -p /pup_new/mnt/tmpfs
- mount -o move /mnt/tmpfs /pup_new/mnt/tmpfs
+    mkdir -p /pup_new/mnt/tmpfs
+    mount -o move /mnt/tmpfs /pup_new/mnt/tmpfs
 fi
 mkdir -p /pup_new$SQMNT/tmp
 cp /tmp/* /pup_new$SQMNT/tmp
 
 #mount home partition. Add DdShurick
 if [ $CRYPTHOME ]; then
-mount $CRYPTHOME /pup_new/home
+    mount $CRYPTHOME /pup_new/home
 elif [ $UUID ]; then
-mount UUID=$UUID /pup_new/home
+    mount UUID=$UUID /pup_new/home
 elif [ $LABEL ];then
-mount LABEL=$LABEL /pup_new/home
+    mount LABEL=$LABEL /pup_new/home
 fi
 
 #PNOX is a boot param. /etc/profile prevents X from starting if this file exists...
@@ -285,8 +285,8 @@ cp -af /tmp/* /pup_new/initrd/tmp/ #keep any log files.
 
 #RDSH is a boot param. exit to initial ramdisk shell...
 if [ "$RDSH" = "yes" ];then
- echo > /dev/console
- echo "Выходим в оболочку рамдиска. Наберите 'exec switch' для продолжения загрузки PuppyRus." > /dev/console 
+    echo > /dev/console
+    echo "Выходим в оболочку рамдиска. Наберите 'exec switch' для продолжения загрузки PuppyRus." > /dev/console 
 fi
 
 sync

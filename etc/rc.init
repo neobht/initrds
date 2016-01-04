@@ -37,18 +37,17 @@ export LANG=C #w004
 
 PATH="/bin:/sbin"
 KERNELVER="`uname -r`"
+#boot parametrs
 [ $loglevel ] && LOGLEVEL=$loglevel #v2.22
-[ $pmedia ] && PMEDIA=$pmedia #boot parameter, broad category of boot media. ex: cd.
-[ $pdev1 ] && PDEV1="$pdev1"    #boot parameter, partition have booted off. ex: hda3
-[ $dev ] && PDEV1="$dev"
-[ $psubdir ] && PSUBDIR="/$psubdir"
-[ $dir ] && PSUBDIR="/$dir" #boot parameter, directory for puppy files. ex: puppy220
-[ $pfsdir ] && PFSDIR="$pfsdir/" || PFSDIR="modules/"
-[ $pkeys ] && PKEYS=$pkeys #boot parameter, keyboard layout w476
-[ $resume ] && RESUME=$resume
-[ $serv ] && IP=$serv #loading of modules from the ftp-server
+[ $pdev1 ] && PDEV1="$pdev1"    #partition have booted off. ex: hda3
+[ $dev ] && PDEV1="$dev"		#partition have booted off. ex: hda3
+[ $psubdir ] && PSUBDIR="/$psubdir" #directory for puppy files. ex: puppy220
+[ $dir ] && PSUBDIR="/$dir" 	#directory for puppy files. ex: puppy220
+[ $pfsdir ] && PFSDIR="$pfsdir/" || PFSDIR="modules/" #directory for boot modules
+[ $resume ] && RESUME=$resume || RESUME=$(fdisk -l | grep -m 1 ' 82 ' | cut -f1 -d' ') # swap
+[ $serv ] && IP=$serv 			#loading of modules from the ftp-server
 [ $servpath ] && DIR=$servpath
-[ $load ] && LOAD=$(echo $load | tr ',' ' ')
+[ $load ] && LOAD=$(echo $load | tr ',' ' ') 
 [ $noload ] && NOLOAD="$(echo \'$noload\' | tr ',' '|' | tr -d ' ')"
 #now supporting a boot menu...
 RDSH=""
@@ -63,11 +62,7 @@ if [ "$pfix" ];then
    rdsh0)   RDSH="0";;            #drop out early, before loading drivers.
    rdsh6)   RDSH="6";;            #w091027 drop out just before mount layerfs.
    nox)     PNOX="yes";;          #do not start X.
-   clean)   PCLEAN="yes";;        #force version upgrade and cleanup.
-   purge)   PPURGE="yes";;        #radical cleanup for broken system.
    copy)    PCOPY="yes";;         #copy .sfs files into ram.
-   fsck)    PFSCK="yes";;         #do a fsck of ${DISTRO_FILE_PREFIX}save file.
-   [0-9]*)  PIGNORELAST=$ONEFIX;; #blacklist last $ONEFIX folders (multisession).
   esac
  done
 fi
@@ -85,7 +80,6 @@ clear #got this out of embutils, compiled in t2 (as not currently in busybox)
 #puppyrus2 tuxonice section 
 ###########  Tuxonice wake up ##############
 
-[ $RESUME ] || RESUME=$(fdisk -l | grep -m 1 ' 82 ' | cut -f1 -d' ')
 echo $RESUME > /sys/power/tuxonice/resume
 sleep 0.1
 echo 1 > /sys/power/tuxonice/do_resume
@@ -105,7 +99,8 @@ fi
 echo -n "Монтирование загрузочного устройства" > /dev/console
 DEV=$(blkid | grep $PDEV1 | cut -f1 -d:)
 blkid $DEV | grep ntfs && MNT=ntfs-3g || MNT=mount
-until $MNT $DEV /mnt/dev_base $RO 2>/dev/null && check_status 0
+mkdir /mnt/$PDEV1
+until $MNT $DEV /mnt/$PDEV1 $RO 2>/dev/null && check_status 0
  do
   sleep 1
   echo -n . >/dev/console
@@ -116,34 +111,34 @@ if [ "$PSUBDIR" = "" ]; then
  read PSUBDIR
  [ $PSUBDIR ] && PSUBDIR=/$PSUBDIR
 fi
-cp /mnt/dev_base${PSUBDIR}/DISTRO_SPECS /etc/DISTRO_SPECS
+cp /mnt/${PDEV1}${PSUBDIR}/DISTRO_SPECS /etc/DISTRO_SPECS
 . /etc/DISTRO_SPECS
 [ $SQMNT ] || SQMNT=/mnt/bundles
-find /mnt/dev_base${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs 2>/dev/null > /tmp/PUPPYFILES
+find /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs 2>/dev/null > /tmp/PUPPYFILES
 echo -n "Загружается базовый файл" > /dev/console
 if [ "$PCOPY" = "yes" ]; then
-cp /mnt/dev_base${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /mnt/tmpfs/
+cp /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /mnt/tmpfs/
 mount -o loop /mnt/tmpfs/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /base || (echo "База не найдена">/dev/console; check_status 1)
 else
-mount -o loop /mnt/dev_base${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /base  || (echo "База не найдена">/dev/console; check_status 1)
+mount -o loop /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /base  || (echo "База не найдена">/dev/console; check_status 1)
 fi
-if [ -d /mnt/dev_base$PSUBDIR/changes -a "$RO" != "-r" ]; then
-ln -s /mnt/dev_base$PSUBDIR/changes /save || check_status 1
+if [ -d /mnt/${PDEV1}${PSUBDIR}/changes -a "$RO" != "-r" ]; then
+ln -s /mnt/${PDEV1}${PSUBDIR}/changes /save || check_status 1
 echo -n ", подключается каталог сохранения." > /dev/console
-elif [ "$(ls /mnt/dev_base$PSUBDIR/base/${DISTRO_FILE_PREFIX}-save.[234s]fs)" ]; then
- if [ -f /mnt/dev_base$PSUBDIR/base/${DISTRO_FILE_PREFIX}-save.[234]fs ]; then
-mount -o loop /mnt/dev_base$PSUBDIR/base/${DISTRO_FILE_PREFIX}-save.[234]fs /save0 || check_status 1
+elif [ "$(ls /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.[234s]fs)" ]; then
+ if [ -f /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.[234]fs ]; then
+mount -o loop /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.[234]fs /save0 || check_status 1
 MKRAM="yes"
 UMNTMAIN='/save0=ro+wh:'
 echo -n " и файл сохранения " > /dev/console
 PUPMODE=13
  fi
- if [ -f /mnt/dev_base$PSUBDIR/base/${DISTRO_FILE_PREFIX}-save.sfs ]; then
+ if [ -f /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.sfs ]; then
   if [ "$PCOPY" = "yes" ]; then
-cp /mnt/dev_base$PSUBDIR/base/${DISTRO_FILE_PREFIX}-save.sfs /mnt/tmpfs/
+cp /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.sfs /mnt/tmpfs/
 mount -o loop /mnt/tmpfs/${DISTRO_FILE_PREFIX}-save.sfs /save1 || check_status 1
   else
-mount -o loop /mnt/dev_base$PSUBDIR/base/${DISTRO_FILE_PREFIX}-save.sfs /save1 || check_status 1
+mount -o loop /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.sfs /save1 || check_status 1
   fi
 UMNTSFS='/save1=ro+wh:'
 MKRAM="yes"
@@ -154,13 +149,13 @@ else
 MKRAM="yes"
 PUPMODE=5
 fi
-if [ -f /mnt/dev_base$PSUBDIR/base/kernel-${KERNELVER}.sfs ]; then
-echo /mnt/dev_base$PSUBDIR/base/kernel-${KERNELVER}.sfs >> /tmp/PUPPYFILES
+if [ -f /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs ]; then
+echo /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs >> /tmp/PUPPYFILES
  if [ "$PCOPY" = "yes" ]; then
-cp /mnt/dev_base$PSUBDIR/base/kernel-${KERNELVER}.sfs /mnt/tmpfs
+cp /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs /mnt/tmpfs
 mount -o loop /mnt/tmpfs/kernel-${KERNELVER}.sfs /kernel || check_status 1
  else
-mount -o loop /mnt/dev_base$PSUBDIR/base/kernel-${KERNELVER}.sfs /kernel || check_status 1
+mount -o loop /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs /kernel || check_status 1
  fi
 ZLAYER=':/kernel=ro'
 fi
@@ -176,8 +171,8 @@ check_status 0
 
 ##########################FINDING AND LOADING PUPPY MODULES###########################
 
-if [ "$PSOFT" != "no" -o -d /mnt/dev_base${PSUBDIR}/${PFSDIR} ];then
-EXTRASFSLIST="$(find /mnt/dev_base${PSUBDIR}/${PFSDIR} -name *\.pfs -exec basename {} \;)"
+if [ "$PSOFT" != "no" -o -d /mnt/${PDEV1}${PSUBDIR}/${PFSDIR} ];then
+EXTRASFSLIST="$(find /mnt/${PDEV1}${PSUBDIR}/${PFSDIR} -name *\.pfs -exec basename {} \;)"
 [ $NOLOAD ] && EXTRASFSLIST="$(echo $EXTRASFSLIST | egrep -v $NOLOAD)"
  if [ "$EXTRASFSLIST" != "" ];then
 echo -n "Загружаются модули программ" > /dev/console
@@ -185,7 +180,7 @@ echo "$EXTRASFSLIST" | sort > /tmp/PFSMODULES
 CNTLOOP=3
   for ONEEXTRA in $(cat /tmp/PFSMODULES)
   do
-   [ "$(dirname $ONEEXTRA)" = "." ] && PFSSDIR="/mnt/dev_base$PSUBDIR/$PFSDIR" || PFSSDIR="/mnt/dev_base/"
+   [ "$(dirname $ONEEXTRA)" = "." ] && PFSSDIR="/mnt/${PDEV1}${PSUBDIR}/${PFSDIR}" || PFSSDIR="/mnt/$PDEV1/"
    [ -f ${PFSSDIR}${ONEEXTRA} ] || continue
    [ "$(grep $ONEEXTRA /proc/mounts)" = "" ] || continue
     mkdir -p /$ONEEXTRA
@@ -208,14 +203,14 @@ CNTLOOP=3
  fi
   [ $LOAD ] && for ONEEXTRA in $LOAD
   do
-   [ -f /mnt/dev_base$PSUBDIR/optional/${ONEEXTRA} ] || continue
+   [ -f /mnt/${PDEV1}${PSUBDIR}/optional/${ONEEXTRA} ] || continue
    [ "$(grep $ONEEXTRA /proc/mounts)" = "" ] || continue
    mkdir -p /$ONEEXTRA
    if [ "$PCOPY" = "yes" ]; then
-    cp /mnt/dev_base$PSUBDIR/optional/${ONEEXTRA} /mnt/tmpfs/
+    cp /mnt/${PDEV1}${PSUBDIR}/optional/${ONEEXTRA} /mnt/tmpfs/
     mount -o loop /mnt/tmpfs/${ONEEXTRA} /$ONEEXTRA
     else
-    mount -o loop /mnt/dev_base$PSUBDIR/optional/${ONEEXTRA} /$ONEEXTRA
+    mount -o loop /mnt/${PDEV1}${PSUBDIR}/optional/${ONEEXTRA} /$ONEEXTRA
     fi
     [ $? -eq 0 ] && UMNTRO="${UMNTRO}:/${ONEEXTRA}=ro"
     echo -n "$CNTLOOP " >> /tmp/CNTLOOP
@@ -227,8 +222,8 @@ else
 echo -n "Загрузка без модулей" > /dev/console
 check_status 0
 fi
-if [ ! -d /mnt/dev_base$PSUBDIR/changes -a "$PCOPY" = "yes" ]; then
-umount /mnt/dev_base
+if [ ! -d /mnt/${PDEV1}${PSUBDIR}/changes -a "$PCOPY" = "yes" ]; then
+umount /mnt/$PDEV1
 fi
 
 #####################END FINDING AND LOADING PUPPY MODULES#################
@@ -263,8 +258,8 @@ do
  mount -o move $ONEMNT /pup_new${SQMNT}$ONEMNT
 done
 
-mkdir -p /pup_new/mnt/dev_base
-mount -o move /mnt/dev_base /pup_new/mnt/dev_base
+mkdir -p /pup_new/mnt/$PDEV1
+mount -o move /mnt/$PDEV1 /pup_new/mnt/$PDEV1
 mkdir -p /pup_new/mnt/save
 mount -o move /save /pup_new/mnt/save
 if [ "$PCOPY" = "yes" ]; then

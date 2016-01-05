@@ -63,6 +63,7 @@ if [ "$pfix" ];then
    rdsh6)   RDSH="6";;            #w091027 drop out just before mount layerfs.
    nox)     PNOX="yes";;          #do not start X.
    copy)    PCOPY="yes";;         #copy .sfs files into ram.
+   nocopy)	PCOPY="no";;		  #not copy .sfs files into ram
    showmntpt) SHOW="yes";;		  #show loops mountpoint
   esac
  done
@@ -92,7 +93,6 @@ swapon $RESUME && SWAPON=yes
 #######################FINDING AND LOADING PUPPY FILES###########################
 [ "$RDSH" = "0" ] && exec /bin/sh >/dev/console 2>&1
 
-[ "$PCOPY" = "yes" ] && mount -t tmpfs tmpfs /mnt/tmpfs
 if [ "$PDEV1" = "" ]; then
  echo "Укажите загрузочное устройство, например sda1" > /dev/console
  read PDEV1
@@ -112,10 +112,12 @@ if [ "$PSUBDIR" = "" ]; then
  read PSUBDIR
  [ $PSUBDIR ] && PSUBDIR=/$PSUBDIR
 fi
+[ ! "$PCOPY" ] && [ "$(cat /sys/block/${PDEV1:0:3}/removable)" = 1  ] && PCOPY="yes"
+[ "$PCOPY" = "yes" ] && mount -t tmpfs tmpfs /mnt/tmpfs
 cp /mnt/${PDEV1}${PSUBDIR}/DISTRO_SPECS /etc/DISTRO_SPECS
 . /etc/DISTRO_SPECS
 [ $SQMNT ] || SQMNT=/mnt/bundles
-find /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs 2>/dev/null > /tmp/PUPPYFILES
+find /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs 2>/dev/null
 echo -n "Загружается базовый файл" > /dev/console
 if [ "$PCOPY" = "yes" ]; then
  cp /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-${DISTRO_VERSION}-base.sfs /mnt/tmpfs/
@@ -127,7 +129,7 @@ if [ -d /mnt/${PDEV1}${PSUBDIR}/changes -a "$RO" != "-r" ]; then
  ln -s /mnt/${PDEV1}${PSUBDIR}/changes /save || check_status 1
  echo -n ", подключается каталог сохранения." > /dev/console
 elif [ "$(ls /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.[234s]fs)" ]; then
-	if [ -f /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.[234]fs ]; then
+	if [ -f /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.[234]fs ]; then	 
 	 mount -o loop /mnt/${PDEV1}${PSUBDIR}/base/${DISTRO_FILE_PREFIX}-save.[234]fs /save0 || check_status 1
 	 MKRAM="yes"
 	 UMNTMAIN='/save0=ro+wh:'
@@ -148,7 +150,6 @@ else
  MKRAM="yes"
 fi
 if [ -f /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs ]; then
- echo /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs >> /tmp/PUPPYFILES
 	if [ "$PCOPY" = "yes" ]; then
 	 cp /mnt/${PDEV1}${PSUBDIR}/base/kernel-${KERNELVER}.sfs /mnt/tmpfs
 	 mount -o loop /mnt/tmpfs/kernel-${KERNELVER}.sfs /kernel || check_status 1
@@ -282,6 +283,7 @@ cp -af /tmp/* /pup_new/initrd/tmp/ #keep any log files.
 if [ "$RDSH" = "yes" ];then
  echo > /dev/console
  echo "Выходим в оболочку рамдиска. Наберите 'exec switch' для продолжения загрузки PuppyRus." > /dev/console 
+ exec /bin/sh >/dev/console 2>&1
 fi
 
 sync

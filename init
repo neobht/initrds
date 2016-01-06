@@ -82,7 +82,6 @@ clear #got this out of embutils, compiled in t2 (as not currently in busybox)
 #puppyrus2 tuxonice section 
 ###########  Tuxonice wake up ##############
 
-[ $RESUME ] || RESUME=$(fdisk -l | grep -m 1 ' 82 ' | cut -f1 -d' ')
 echo $RESUME > /sys/power/tuxonice/resume
 sleep 0.1
 echo 1 > /sys/power/tuxonice/do_resume
@@ -94,25 +93,34 @@ swapon $RESUME && SWAPON=yes
 #######################FINDING AND LOADING PUPPY FILES###########################
 [ "$RDSH" = "0" ] && exec /bin/sh >/dev/console 2>&1
 
-if [ "$PDEV" = "" ]; then
- echo "Укажите загрузочное устройство, например sda1" > /dev/console
- read PDEV
-fi
-echo -n "Монтирование загрузочного устройства" > /dev/console
-DEV=$(blkid | grep $PDEV | cut -f1 -d:)
-blkid $DEV | grep ntfs && MNT=ntfs-3g || MNT=mount
-mkdir /mnt/$PDEV
-until $MNT $DEV /mnt/$PDEV $RO 2>/dev/null && check_status 0
-	do
-	 sleep 1
-	 echo -n . >/dev/console
-	done
-if [ "$PDIR" = "" ]; then
- echo "Укажите загрузочный каталог, если файлы PuppyRus
-в корне раздела просто нажмите Enter" > /dev/console
- read PDIR
- [ $PDIR ] && PDIR=/$PDIR
-fi
+PDEV=$(blkid | grep $PDEV | cut -f1 -d:) #if $PDEV - UUID
+echo -n "Поиск файлов Puppy" > /dev/console
+ 
+for DEV in $PDEV $(blkid | awk -F: '!/loop|swap/ {print $1}')
+ do
+  blkid $DEV | grep ntfs && MNT=ntfs-3g || MNT=mount
+  DEV=${DEV:5} 
+  mkdir /mnt/$DEV
+  N=0
+ 	until $MNT /dev/$DEV /mnt/$DEV $RO 2>/dev/null
+	 do
+	  sleep 1
+	  echo -n . >/dev/console
+	  N=$(expr $N + 1)
+	  [ $N = 10 ] && break
+	 done
+  DIR=$(ls /mnt/$DEV/*/base/kernel-`uname -r`.sfs 2>/dev/null | cut -d'/' -f4)
+	if [ ! $DIR ]; then
+	 umount /mnt/$DEV
+	 rmdir /mnt/$DEV
+ 	 continue
+ 	fi
+  PDEV=$DEV
+  PDIR=/$DIR
+  check_status 0
+  break
+ done
+
 [ ! "$PCOPY" ] && [ "$(cat /sys/block/${PDEV:0:3}/removable)" = 1  ] && PCOPY="yes"
 [ "$PCOPY" = "yes" ] && mount -t tmpfs tmpfs /mnt/tmpfs
 cp /mnt/${PDEV}${PDIR}/DISTRO_SPECS /etc/DISTRO_SPECS

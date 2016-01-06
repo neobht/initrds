@@ -41,8 +41,8 @@ KERNELVER="`uname -r`"
 [ $loglevel ] && LOGLEVEL=$loglevel #v2.22
 [ $pdev1 ] && PDEV="$pdev1"    #partition have booted off. ex: hda3
 [ $dev ] && PDEV="$dev"		#partition have booted off. ex: hda3
-[ $psubdir ] && PDIR="/$psubdir" #directory for puppy files. ex: puppy220
-[ $dir ] && PDIR="/$dir" 	#directory for puppy files. ex: puppy220
+[ $psubdir ] && PDIR="$psubdir" || PDIR="*" #directory for puppy files. ex: puppy220
+[ $dir ] && PDIR="$dir" || PDIR="*" 	#directory for puppy files. ex: puppy220
 [ $pfsdir ] && PFSDIR="$pfsdir/" || PFSDIR="modules/" #directory for boot modules
 [ $resume ] && RESUME=$resume || RESUME=$(fdisk -l | grep -m 1 ' 82 ' | cut -f1 -d' ') # swap
 [ $serv ] && IP=$serv 			#loading of modules from the ftp-server
@@ -109,11 +109,15 @@ for DEV in $PDEV $(blkid | awk -F: '!/loop|swap/ {print $1}')
 	  N=$(expr $N + 1)
 	  [ $N = 10 ] && break
 	 done
-  DIR=$(ls /mnt/$DEV/*/base/kernel-`uname -r`.sfs 2>/dev/null | cut -d'/' -f4)
+  DIR=$(ls /mnt/$DEV/$PDIR/base/kernel-`uname -r`.sfs 2>/dev/null | cut -d'/' -f4)
 	if [ ! $DIR ]; then
 	 umount /mnt/$DEV
 	 rmdir /mnt/$DEV
  	 continue
+ 	elif [ "$(echo $DIR | wc -w)" -gt 1 ]; then
+ 	 echo "Выберите загрузочный каталог и напечатайте его имя:" > /dev/console
+ 	 echo $DIR > /dev/console
+ 	 read DIR
  	fi
   PDEV=$DEV
   PDIR=/$DIR
